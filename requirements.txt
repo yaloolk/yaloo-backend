@@ -68,3 +68,4 @@ whitenoise==6.7.0
 dj-database-url==2.2.0
 celery==5.4.0
 django-celery-beat==2.6.0
+stripe==15.0.1
