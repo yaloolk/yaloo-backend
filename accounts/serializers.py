@@ -250,25 +250,32 @@ class CompleteGuideProfileSerializer(serializers.ModelSerializer):
         ]
 
     def get_interests(self, obj):
+        """Pull Interests from the UserProfile linked to this Guide"""
         from .models import UserInterest
         ints = UserInterest.objects.filter(
-            user_profile=obj.user_profile).select_related('interest')
-        return [{'id': str(i.interest.id), 'name': i.interest.name,
-                 'category': i.interest.category} for i in ints]
+            user_profile=obj.user_profile
+        ).select_related('interest')
+        return [
+            {
+                'id': str(i.interest.id), 
+                'name': i.interest.name,
+                'category': i.interest.category
+            } for i in ints
+        ]
 
     def get_specializations(self, obj):
+        """Pull Professional Specializations linked to the GuideProfile"""
         from .models import GuideSpecialization
         specs = GuideSpecialization.objects.filter(
             guide_profile=obj
         ).select_related('specialization')
         return [
             {
-                'id':       str(s.specialization.id),
-                'slug':     s.specialization.slug,
-                'label':    s.specialization.label,
+                'id': str(s.specialization.id),
+                'slug': s.specialization.slug,
+                'label': s.specialization.label,
                 'category': s.specialization.category,
-            }
-            for s in specs
+            } for s in specs
         ]
 
     def get_local_activities(self, obj):

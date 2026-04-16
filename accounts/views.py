@@ -3377,6 +3377,21 @@ def guide_public_profile(request, guide_profile_id):
                                              .select_related('specialization')
     ]
 
+    las = LocalActivity.objects.filter(guide=guide).select_related('activity')
+    local_activities_data = []
+    for la in las:
+        if la.activity:
+            local_activities_data.append({
+                'local_activity_id': str(la.id),
+                'activity_id': str(la.activity.id),
+                'name': la.activity.name,
+                'category': la.activity.category,
+                'description': la.activity.description or '',
+                'duration': la.activity.duration,
+                'set_price': la.set_price or la.activity.base_price,
+                'special_note': la.special_note or '',
+            })
+
     gallery_data = [
         {'id': str(p.id), 'url': p.file_path}
         for p in Media.objects.filter(uploader=up, file_type='image')
@@ -4054,3 +4069,5 @@ def remove_guide_activity(request, local_activity_id):
  
     RedisCache.invalidate_all_user_data(str(user_profile.id))
     return Response({'message': 'Activity removed'})
+
+
