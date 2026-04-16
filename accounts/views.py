@@ -1458,8 +1458,8 @@ def add_guide_availability(request):
             
             logger.info(f"✅ Created pattern {pattern.id}: {active_from} to {active_until}, {start_time_input}-{end_time_input}")
             
-            # 2. Create hourly slots for each date
-            created_slots = []
+            # 2. Prepare objects in memory (NO database calls in the loop)
+            slots_to_create = []
             skipped_dates = []
             
             for date_str in dates:
@@ -1468,41 +1468,35 @@ def add_guide_availability(request):
                     skipped_dates.append(date_str)
                     continue
                 
-                # Create one slot per hour
+                # Create one slot per hour in memory
                 for slot in hourly_slots:
-                    # Check if this exact slot already exists
-                    existing = GuideAvailability.objects.filter(
-                        guide_profile=guide,
-                        date=date_str,
-                        start_time=slot['start_time']
-                    ).exists()
-                    
-                    if existing:
-                        continue  # Skip duplicate hourly slot
-                    
-                    availability_slot = GuideAvailability.objects.create(
-                        guide_profile=guide,
-                        date=date_str,
-                        start_time=slot['start_time'],
-                        end_time=slot['end_time'],
-                        is_booked=False
+                    slots_to_create.append(
+                        GuideAvailability(
+                            guide_profile=guide,
+                            date=date_str,
+                            start_time=slot['start_time'],
+                            end_time=slot['end_time'],
+                            is_booked=False
+                        )
                     )
-                    created_slots.append(availability_slot)
             
-            logger.info(f"✅ Created {len(created_slots)} hourly slots across {len(dates)} dates")
+            # 3. Hit the database ONCE
+            # ignore_conflicts=True gracefully skips any exact duplicate slots that already exist
+            if slots_to_create:
+                GuideAvailability.objects.bulk_create(slots_to_create, ignore_conflicts=True)
+            
+            logger.info(f"✅ Bulk created {len(slots_to_create)} hourly slots across {len(dates)} dates")
         
-        # 3. Invalidate caches
+        # 4. Invalidate caches
         cache.delete(AVAILABILITY_CACHE_KEY.format(user_id=user_id))
         RedisCache.invalidate_user_profile(user_id)
         
         return Response({
-            'message': f'Created {len(created_slots)} hourly slots across {len([d for d in dates if d not in skipped_dates])} days',
+            'message': f'Processed {len(slots_to_create)} hourly slots across {len([d for d in dates if d not in skipped_dates])} days',
             'pattern_id': str(pattern.id),
             'hourly_slots_per_day': len(hourly_slots),
-            'total_slots_created': len(created_slots),
             'dates_processed': len(dates) - len(skipped_dates),
-            'skipped_dates': skipped_dates,
-            'created_slots': GuideAvailabilitySerializer(created_slots[:10], many=True).data  # Show first 10
+            'skipped_dates': skipped_dates
         }, status=201)
 
     except GuideProfile.DoesNotExist:
@@ -2676,26 +2670,33 @@ def set_stay_availability(request, stay_id):
         
         created = updated = 0
         
+        availabilities_to_upsert = []
+        
         with transaction.atomic():
             current_date = start_d
             while current_date <= end_d:
-                _, was_created = StayAvailability.objects.update_or_create(
-                    stay=stay,
-                    date=current_date,
-                    defaults={
-                        'total_room': total_room,
-                        'is_available': is_available
-                    }
+                availabilities_to_upsert.append(
+                    StayAvailability(
+                        stay=stay,
+                        date=current_date,
+                        total_room=total_room,
+                        is_available=is_available
+                    )
                 )
-                if was_created:
-                    created += 1
-                else:
-                    updated += 1
-                
                 current_date += timedelta(days=1)
+                
+            # Perform a bulk upsert (Requires Django 4.1+)
+            # This inserts new dates, and updates existing dates with the new room/availability data
+            if availabilities_to_upsert:
+                StayAvailability.objects.bulk_create(
+                    availabilities_to_upsert,
+                    update_conflicts=True,
+                    unique_fields=['stay', 'date'], # Ensure you have a unique_together constraint on these in models.py
+                    update_fields=['total_room', 'is_available']
+                )
         
         return Response({
-            'message': f'Availability set: {created} created, {updated} updated',
+            'message': f'Availability set successfully for {(end_d - start_d).days + 1} days',
             'dates_processed': (end_d - start_d).days + 1
         }, status=201)
         
