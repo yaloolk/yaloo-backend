@@ -3377,8 +3377,8 @@ def guide_public_profile(request, guide_profile_id):
                                              .select_related('specialization')
     ]
 
-    las = LocalActivity.objects.filter(guide=guide).select_related('activity')
     local_activities_data = []
+    las = LocalActivity.objects.filter(guide=guide).select_related('activity')
     for la in las:
         if la.activity:
             local_activities_data.append({
@@ -3460,6 +3460,8 @@ def guide_public_profile(request, guide_profile_id):
         'verification_status':      guide.verification_status,
         'languages':                languages,
         'specialties':              specialties,
+        'specializations':          specializations,
+        'local_activities':         local_activities_data,
         'gallery':                  gallery_data,
         'availability':             availability,
         'reviews':                  reviews_data,
