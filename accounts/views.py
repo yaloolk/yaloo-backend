@@ -267,7 +267,7 @@ def get_all_cities(request):
 @permission_classes([IsAuthenticated])
 def complete_tourist_profile(request):
     """Complete tourist profile with interests - INVALIDATE CACHE"""
-    user_profile = request.user.user_profile if hasattr(request.user, 'user_profile') else request.user
+    user_profile = _get_user_profile(request)
     user_id = str(user_profile.id)
     
     if user_profile.user_role != 'tourist':
@@ -346,7 +346,7 @@ def complete_tourist_profile(request):
 @permission_classes([IsAuthenticated])
 def skip_profile_completion(request):
     """Allow tourists to skip profile completion"""
-    user_profile = request.user.user_profile if hasattr(request.user, 'user_profile') else request.user
+    user_profile = _get_user_profile(request)
     
     if user_profile.user_role != 'tourist':
         return Response({'error': 'Only tourists can skip'}, status=status.HTTP_403_FORBIDDEN)
